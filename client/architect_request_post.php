@@ -1,106 +1,95 @@
 <?php
-session_start();
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
+require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/db.php';
 
-if (empty($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'client') {
+if (empty($_SESSION['user_id'])) {
+  header("Location: /homeplan/auth/login.php");
+  exit;
+}
+if (strtolower(trim($_SESSION['role'] ?? '')) !== 'client') {
   header("Location: /homeplan/auth/login.php");
   exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+$client_id = (int)$_SESSION['user_id'];
+
+/* accept both keys to be safe */
+$architect_id = (int)($_POST['architect_user_id'] ?? ($_POST['architect_id'] ?? 0));
+
+$project_type   = trim($_POST['project_type'] ?? '');
+$location       = trim($_POST['location'] ?? '');
+$area_sqft      = (int)($_POST['area_sqft'] ?? 0);
+$budget         = ($_POST['budget'] ?? null);
+$preferred_date = trim($_POST['preferred_date'] ?? '');
+$message        = trim($_POST['message'] ?? '');
+
+if ($architect_id <= 0 || $project_type === '' || $location === '' || $area_sqft <= 0) {
   header("Location: /homeplan/client/architect_list.php");
   exit;
 }
 
-$clientId      = (int)$_SESSION['user_id'];
-$architectId   = isset($_POST['architect_id']) ? (int)$_POST['architect_id'] : 0;
-$projectType   = trim($_POST['project_type'] ?? '');
-$location      = trim($_POST['location'] ?? '');
-$areaSqft      = ($_POST['area_sqft'] ?? '') !== '' ? (int)$_POST['area_sqft'] : null;
-$budget        = ($_POST['budget'] ?? '') !== '' ? (float)$_POST['budget'] : null;
-$preferredDate = trim($_POST['preferred_date'] ?? '');
-$message       = trim($_POST['message'] ?? '');
+/* normalize optional fields */
+$budget = ($budget === '' || $budget === null) ? null : (float)$budget;
+$preferred_date = ($preferred_date === '') ? null : $preferred_date;
 
-$backUrl = "/homeplan/client/architect_request_form.php?architect_id=" . (int)$architectId;
-
-if ($architectId <= 0 || $projectType === '' || $location === '') {
-  header("Location: {$backUrl}&error=missing");
+/* ensure architect exists */
+$st = $conn->prepare("SELECT user_id FROM users WHERE user_id=? AND LOWER(TRIM(role))='architect' LIMIT 1");
+$st->bind_param("i", $architect_id);
+$st->execute();
+if (!$st->get_result()->fetch_assoc()) {
+  header("Location: /homeplan/client/architect_list.php");
   exit;
 }
 
-// Ensure architect exists
-$check = $pdo->prepare("SELECT user_id FROM users WHERE user_id=? AND LOWER(role)='architect' LIMIT 1");
-$check->execute([$architectId]);
-if (!$check->fetchColumn()) {
-  header("Location: {$backUrl}&error=notfound");
-  exit;
-}
-
-// Normalize date
-if ($preferredDate === '') {
-  $preferredDate = null;
-}
-
-// Prevent duplicate pending request
-$dup = $pdo->prepare("
+/* prevent duplicate pending requests (same client->same architect) */
+$dup = $conn->prepare("
   SELECT request_id
   FROM architect_requests
-  WHERE client_user_id = ? AND architect_user_id = ? AND status = 'pending'
-  ORDER BY request_id DESC
+  WHERE client_user_id=? AND architect_user_id=? AND status='pending'
   LIMIT 1
 ");
-$dup->execute([$clientId, $architectId]);
-if ($dup->fetchColumn()) {
-  header("Location: {$backUrl}&error=already");
+$dup->bind_param("ii", $client_id, $architect_id);
+$dup->execute();
+if ($dup->get_result()->fetch_assoc()) {
+  header("Location: /homeplan/client/architect_view.php?architect_id={$architect_id}&ok=1");
   exit;
 }
 
-// Insert (IMPORTANT: do NOT include request_id column; it is AUTO_INCREMENT)
-$stmt = $pdo->prepare("
+/* insert request (matches your table columns) */
+$ins = $conn->prepare("
   INSERT INTO architect_requests
-    (client_user_id, architect_user_id, project_type, location, area_sqft, budget, preferred_date, message, status)
+    (client_user_id, architect_user_id, project_type, location, area_sqft, message, status, budget, preferred_date)
   VALUES
-    (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+    (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
 ");
-$stmt->execute([
-  $clientId,
-  $architectId,
-  $projectType,
+
+$ins->bind_param(
+  "iississs",
+  $client_id,
+  $architect_id,
+  $project_type,
   $location,
-  $areaSqft,
+  $area_sqft,
+  $message,
   $budget,
-  $preferredDate,
-  ($message === '' ? null : $message)
-]);
-// ===== Notify architect =====
+  $preferred_date
+);
 
-// Fetch client name
-$stmt = $pdo->prepare("SELECT full_name FROM users WHERE user_id = ? LIMIT 1");
-$stmt->execute([$clientId]);
-$clientName = (string)$stmt->fetchColumn();
+$ins->execute();
 
-// Count pending requests for this architect
-$stmt = $pdo->prepare("
-    SELECT COUNT(*) 
-    FROM architect_requests 
-    WHERE architect_user_id = ? AND status = 'pending'
-");
-$stmt->execute([$architectId]);
-$pendingCount = (int)$stmt->fetchColumn();
+/* OPTIONAL notification insert (won't break if notifications table differs) */
+try {
+  $msg = "New architect request: {$project_type} ({$location})";
+  $nt = $conn->prepare("INSERT INTO notifications (user_id, message, status) VALUES (?, ?, 'unread')");
+  $nt->bind_param("is", $architect_id, $msg);
+  $nt->execute();
+} catch (Throwable $e) {
+  // ignore if notifications schema is different
+}
 
-// Build message
-$notifMsg = "You have {$pendingCount} pending request"
-          . ($pendingCount > 1 ? "s" : "")
-          . " from {$clientName}.";
-
-// Insert notification
-$stmt = $pdo->prepare("
-    INSERT INTO notifications (user_id, message, status, creation_date)
-    VALUES (?, ?, 'unread', NOW())
-");
-$stmt->execute([$architectId, $notifMsg]);
-
-header("Location: {$backUrl}&success=1");
+header("Location: /homeplan/client/architect_view.php?architect_id={$architect_id}&ok=1");
 exit;
-
 

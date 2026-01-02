@@ -13,7 +13,7 @@ if (($_SESSION['role'] ?? '') !== 'property_owner') {
   exit;
 }
 
-$owner_id = (int)$_SESSION['user_id'];
+$provider_id = (int)$_SESSION['user_id'];
 
 if (empty($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
@@ -41,7 +41,7 @@ try {
     ORDER BY p.property_id DESC
   ";
   $stmt = $conn->prepare($sql);
-  $stmt->bind_param("i", $owner_id);
+  $stmt->bind_param("i", $provider_id);
   $stmt->execute();
   $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 } catch (Throwable $e) {

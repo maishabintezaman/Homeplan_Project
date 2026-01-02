@@ -1,4 +1,5 @@
 <?php
+/ /homeplan/architect/client_requests.php
 session_start();
 require_once __DIR__ . '/../config/db.php';
 
@@ -25,7 +26,7 @@ try {
     $pdo->beginTransaction();
 
     // Load request and verify ownership
-    $stmt = $pdo->prepare("
+    $conn = new mysqli("
         SELECT
             ar.client_user_id,
             ar.project_type,

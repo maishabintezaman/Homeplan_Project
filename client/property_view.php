@@ -1,5 +1,5 @@
 <?php
-
+// /homeplan/client/property_view.php
 require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/db.php';
 
@@ -8,7 +8,6 @@ if (empty($_SESSION['user_id'])) {
     header("Location: /homeplan/auth/login.php");
     exit;
 }
-
 if (($_SESSION['role'] ?? '') !== 'client') {
     header("Location: /homeplan/index.php");
     exit;
@@ -50,21 +49,16 @@ LIMIT 1
 ";
 
 $stmt = $conn->prepare($sql);
-if (!$stmt) {
-    echo "Prepare failed: " . htmlspecialchars($conn->error);
-    exit;
-}
 $stmt->bind_param("i", $property_id);
 $stmt->execute();
-$result = $stmt->get_result();
-$row = $result->fetch_assoc();
+$row = $stmt->get_result()->fetch_assoc();
 
 if (!$row) {
     echo "Property not found.";
     exit;
 }
 
-/* ---------- Build nice location text ---------- */
+/* ---------- Build location text ---------- */
 $locParts = [];
 if (!empty($row['location_house']))  $locParts[] = $row['location_house'];
 if (!empty($row['location_street'])) $locParts[] = $row['location_street'];
@@ -74,9 +68,7 @@ $location_text = implode(', ', $locParts);
 if (!empty($row['location_area_code'])) {
     $location_text .= " (" . $row['location_area_code'] . ")";
 }
-if ($location_text === '') {
-    $location_text = 'N/A';
-}
+if ($location_text === '') $location_text = 'N/A';
 
 /* ---------- Check client request status ---------- */
 $client_id = (int)$_SESSION['user_id'];
@@ -89,14 +81,21 @@ $q = $conn->prepare("
     ORDER BY request_id DESC
     LIMIT 1
 ");
-if ($q) {
-    $q->bind_param("ii", $property_id, $client_id);
-    $q->execute();
-    $req = $q->get_result()->fetch_assoc();
-    if ($req) {
-        $request_status = $req['status'];
-    }
-}
+$q->bind_param("ii", $property_id, $client_id);
+$q->execute();
+$req = $q->get_result()->fetch_assoc();
+if ($req) $request_status = $req['status'];
+
+/* ---------- Message mapping ---------- */
+$msg = $_GET['msg'] ?? '';
+$map = [
+  'requested' => 'Request sent successfully!',
+  'already_requested' => 'You already requested this property.',
+  'not_available' => 'This property is not available right now.',
+  'not_found' => 'Property not found.',
+  'invalid' => 'Invalid request.'
+];
+$flash = $msg ? ($map[$msg] ?? $msg) : '';
 ?>
 <!doctype html>
 <html>
@@ -108,6 +107,10 @@ if ($q) {
 <body class="bg-light">
 
 <div class="container py-4">
+
+    <?php if ($flash): ?>
+      <div class="alert alert-info"><?= htmlspecialchars($flash) ?></div>
+    <?php endif; ?>
 
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h3 class="mb-0">Property Details</h3>
@@ -184,7 +187,6 @@ if ($q) {
 
             <hr>
 
-            <!-- Request section -->
             <div>
                 <strong>Your Request Status:</strong>
                 <?php if ($request_status): ?>
@@ -198,14 +200,12 @@ if ($q) {
 
             <div class="mt-3">
                 <?php if (!$request_status): ?>
-                    <a href="/homeplan/client/request_property.php?id=<?= (int)$row['property_id'] ?>"
-                       class="btn btn-primary">
-                        Send Request
-                    </a>
+                    <form action="/homeplan/client/request_property.php" method="POST" class="d-inline">
+                        <input type="hidden" name="property_id" value="<?= (int)$row['property_id'] ?>">
+                        <button type="submit" class="btn btn-primary">Send Request</button>
+                    </form>
                 <?php else: ?>
-                    <button class="btn btn-secondary" disabled>
-                        Already Requested
-                    </button>
+                    <button class="btn btn-secondary" disabled>Already Requested</button>
                 <?php endif; ?>
             </div>
 
@@ -216,4 +216,5 @@ if ($q) {
 
 </body>
 </html>
+>
 

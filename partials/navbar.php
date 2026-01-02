@@ -38,14 +38,7 @@ if ($userId && isset($conn) && $conn) {
 
     <div class="ms-auto d-flex align-items-center gap-2">
       <?php if ($userId): ?>
-        <a href="/homeplan/notifications.php" class="btn btn-dark position-relative" title="Notifications">
-          🔔
-          <?php if ($unreadCount > 0): ?>
-            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-              <?= (int)$unreadCount ?>
-            </span>
-          <?php endif; ?>
-        </a>
+        
 
         <div class="dropdown">
           <button class="btn btn-dark dropdown-toggle d-flex align-items-center gap-2" data-bs-toggle="dropdown">

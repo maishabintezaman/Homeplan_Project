@@ -1,228 +1,173 @@
 <?php
-session_start();
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 require_once __DIR__ . '/../config/db.php';
 
-function clean($v) {
-    return trim((string)$v);
-}
-
-$errors = [];
-
-$roles = [
-    'client'            => 'Client',
-    'property_owner'    => 'Property Owner',
-    'developer'         => 'Developer',
-    'architect'         => 'Architect',
-    'material_provider' => 'Material Provider',
-    'worker_provider'   => 'Worker Provider',
-    'interior_designer' => 'Interior Designer',
-    'admin'             => 'Admin',
-];
-
-// ONLY these roles are “providers” in your system:
-$providerRoleSet = [
-    'property_owner'    => true,
-    'developer'         => true,
-    'architect'         => true,
-    'material_provider' => true,
-    'worker_provider'   => true,
-    'interior_designer' => true,
-];
-
-$providerTypes = [
-    'developer'   => 'Developer',
-    'builder'     => 'Builder',
-    'contractor'  => 'Contractor',
-    'architect'   => 'Architect',
-];
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
-    $full_name = clean($_POST['full_name'] ?? '');
-    $email     = clean($_POST['email'] ?? '');
-    $phone     = clean($_POST['phone'] ?? '');
-    $password  = (string)($_POST['password'] ?? '');
-    $role      = clean($_POST['role'] ?? '');
-
-    $provider_type = clean($_POST['provider_type'] ?? '');
-    if ($provider_type === '') $provider_type = null;
-
-    // validation
-    if ($full_name === '') $errors[] = "Full name is required.";
-    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = "Valid email is required.";
-    if ($password === '' || strlen($password) < 6) $errors[] = "Password must be at least 6 characters.";
-    if (!array_key_exists($role, $roles)) $errors[] = "Invalid role selected.";
-
-    // provider_type rules
-    if ($role === 'client' || $role === 'admin' || !isset($providerRoleSet[$role])) {
-        $provider_type = null; // force NULL
-    } else {
-        // provider role: provider_type optional but if provided must be valid
-        if ($provider_type !== null && !array_key_exists($provider_type, $providerTypes)) {
-            $errors[] = "Invalid provider type selected.";
-        }
-    }
-
-    if (empty($errors)) {
-        try {
-            // check existing email
-            $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? LIMIT 1");
-            $stmt->bind_param("s", $email);
-            $stmt->execute();
-            $exists = $stmt->get_result()->fetch_assoc();
-
-            if ($exists) {
-                $errors[] = "This email is already registered.";
-            } else {
-                $hash = password_hash($password, PASSWORD_DEFAULT);
-
-                // insert user
-                $stmt = $conn->prepare("
-                    INSERT INTO users (role, provider_type, full_name, email, phone, password)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ");
-
-                // For NULL provider_type, mysqli needs bind_param + set null variable:
-                $pt = $provider_type; // may be null
-                $stmt->bind_param("ssssss", $role, $pt, $full_name, $email, $phone, $hash);
-                $stmt->execute();
-
-                $newUserId = (int)$conn->insert_id;
-
-                // If client -> ensure clients row exists (FK requirement)
-                if ($role === 'client') {
-                    $stmt = $conn->prepare("INSERT IGNORE INTO clients (client_id) VALUES (?)");
-                    $stmt->bind_param("i", $newUserId);
-                    $stmt->execute();
-                }
-
-                // If provider roles -> ensure providers row exists (if you use provider_id FK in properties)
-                $check = $conn->query("SHOW TABLES LIKE 'providers'");
-                if ($check && $check->num_rows > 0 && isset($providerRoleSet[$role])) {
-                    // Try minimal insert
-                    try {
-                        $stmt = $conn->prepare("INSERT IGNORE INTO providers (provider_id) VALUES (?)");
-                        $stmt->bind_param("i", $newUserId);
-                        $stmt->execute();
-                    } catch (mysqli_sql_exception $e) {
-                        // ignore if providers table has different columns
-                    }
-                }
-
-                header("Location: /homeplan/auth/login.php?registered=1");
-                exit;
-            }
-
-        } catch (mysqli_sql_exception $e) {
-            $errors[] = "Registration failed: " . $e->getMessage();
-        }
-    }
+$expertiseList = [];
+try {
+  $q = $conn->query("SELECT expertise_id, type FROM expertise ORDER BY type ASC");
+  while ($row = $q->fetch_assoc()) $expertiseList[] = $row;
+} catch (Throwable $e) {
+  // keep empty
 }
 ?>
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Register</title>
+  <title>Create Account</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <style>
-    .wrap { max-width: 520px; margin: 40px auto; }
+    .card-wrap { max-width: 520px; margin: 40px auto; }
+    .expertise-box { max-height: 210px; overflow:auto; border:1px solid #dee2e6; border-radius:12px; padding:12px; }
   </style>
 </head>
 <body class="bg-light">
 
-<div class="wrap">
+<div class="card-wrap">
   <div class="card shadow-sm">
     <div class="card-body p-4">
-      <h3 class="mb-3">Create Account</h3>
+      <h2 class="mb-4">Create Account</h2>
 
-      <?php if (!empty($errors)): ?>
-        <div class="alert alert-danger">
-          <ul class="mb-0">
-            <?php foreach ($errors as $e): ?>
-              <li><?= htmlspecialchars($e) ?></li>
-            <?php endforeach; ?>
-          </ul>
-        </div>
+      <?php if (!empty($_GET['err'])): ?>
+        <div class="alert alert-danger"><?= htmlspecialchars($_GET['err']) ?></div>
       <?php endif; ?>
 
-      <form method="post" action="">
-        <div class="mb-3">
+      <form method="post" action="/homeplan/auth/register_post.php" class="d-grid gap-3">
+
+        <div>
           <label class="form-label">Full Name</label>
-          <input type="text" name="full_name" class="form-control" required
-                 value="<?= htmlspecialchars($_POST['full_name'] ?? '') ?>">
+          <input name="full_name" class="form-control" required>
         </div>
 
-        <div class="mb-3">
+        <div>
           <label class="form-label">Email</label>
-          <input type="email" name="email" class="form-control" required
-                 value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
+          <input name="email" type="email" class="form-control" required>
         </div>
 
-        <div class="mb-3">
+        <div>
           <label class="form-label">Phone</label>
-          <input type="text" name="phone" class="form-control"
-                 value="<?= htmlspecialchars($_POST['phone'] ?? '') ?>">
+          <input name="phone" class="form-control" required>
         </div>
 
-        <div class="mb-3">
+        <div>
           <label class="form-label">Password</label>
-          <input type="password" name="password" class="form-control" required>
-          <div class="form-text">Minimum 6 characters</div>
+          <input name="password" type="password" class="form-control" minlength="6" required>
+          <div class="text-muted small mt-1">Minimum 6 characters</div>
         </div>
 
-        <div class="mb-3">
+        <div>
           <label class="form-label">Register As (Role)</label>
-          <select name="role" id="role" class="form-select" required onchange="toggleProviderType()">
-            <option value="">-- Select Role --</option>
-            <?php foreach ($roles as $key => $label): ?>
-              <option value="<?= htmlspecialchars($key) ?>"
-                <?= (($_POST['role'] ?? '') === $key) ? 'selected' : '' ?>>
-                <?= htmlspecialchars($label) ?>
-              </option>
-            <?php endforeach; ?>
+          <select name="role" id="role" class="form-select" required>
+            <option value="client">Client</option>
+            <option value="property_owner">Property Owner</option>
+            <option value="developer">Developer</option>
+            <option value="architect">Architect</option>
+            <option value="material_provider">Material Provider</option>
+            <option value="worker_provider">Worker Provider</option>
+            <option value="interior_designer">Interior Designer</option>
           </select>
         </div>
 
-        <div class="mb-3" id="providerTypeBox" style="display:none;">
-          <label class="form-label">Provider Type (optional)</label>
-          <select name="provider_type" class="form-select">
-            <option value="">-- Select Provider Type --</option>
-            <?php foreach ($providerTypes as $key => $label): ?>
-              <option value="<?= htmlspecialchars($key) ?>"
-                <?= (($_POST['provider_type'] ?? '') === $key) ? 'selected' : '' ?>>
-                <?= htmlspecialchars($label) ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
+        <!-- Architect extra fields -->
+        <div id="architectFields" class="d-none">
+          <hr class="my-2">
+
+          <div>
+            <label class="form-label">Architect Certificate / License No</label>
+            <input name="architect_license_no" class="form-control" placeholder="e.g. ARC-12345">
+          </div>
+
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label">Years of Experience</label>
+              <input name="architect_years" type="number" min="0" value="0" class="form-control">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Portfolio (optional)</label>
+              <input name="architect_portfolio" class="form-control" placeholder="URL or short text">
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label">Expertise (select one or more)</label>
+
+            <?php if (count($expertiseList) === 0): ?>
+              <div class="alert alert-warning mb-0">
+                Expertise list is empty. Insert rows into <code>expertise</code> table first.
+              </div>
+            <?php else: ?>
+              <div class="expertise-box">
+                <?php foreach ($expertiseList as $ex): ?>
+                  <div class="form-check">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           name="expertise_ids[]"
+                           id="ex<?= (int)$ex['expertise_id'] ?>"
+                           value="<?= (int)$ex['expertise_id'] ?>">
+                    <label class="form-check-label" for="ex<?= (int)$ex['expertise_id'] ?>">
+                      <?= htmlspecialchars($ex['type']) ?>
+                    </label>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+              <div class="text-muted small mt-1">
+                Tip: You can tick multiple checkboxes.
+              </div>
+            <?php endif; ?>
+          </div>
         </div>
 
-        <button class="btn btn-primary w-100">Register</button>
-
-        <div class="text-center mt-3">
-          Already have an account?
-          <a href="/homeplan/auth/login.php">Login</a>
+        <!-- Developer extra fields (basic for now, DB table needed to store) -->
+        <div id="developerFields" class="d-none">
+          <hr class="my-2">
+          <div>
+            <label class="form-label">Developer License No</label>
+            <input name="developer_license_no" class="form-control" placeholder="e.g. DEV-7788">
+            <div class="text-muted small mt-1">
+              (This field is collected now. We’ll save it once your developer profile table is confirmed.)
+            </div>
+          </div>
         </div>
+
+        <button class="btn btn-primary btn-lg" type="submit">Register</button>
+
+        <div class="text-center">
+          Already have an account? <a href="/homeplan/auth/login.php">Login</a>
+        </div>
+
       </form>
     </div>
   </div>
 </div>
 
 <script>
-function toggleProviderType() {
-  const role = document.getElementById('role').value;
-  const box = document.getElementById('providerTypeBox');
+  const roleSel = document.getElementById('role');
+  const architectFields = document.getElementById('architectFields');
+  const developerFields = document.getElementById('developerFields');
 
-  // show provider_type for non-client provider roles only
-  const providerRoles = ['property_owner','developer','architect','material_provider','worker_provider','interior_designer'];
-  if (providerRoles.includes(role)) box.style.display = 'block';
-  else box.style.display = 'none';
-}
-toggleProviderType();
+  function toggleRoleFields() {
+    const role = roleSel.value;
+
+    architectFields.classList.toggle('d-none', role !== 'architect');
+    developerFields.classList.toggle('d-none', role !== 'developer');
+
+    // If not architect, clear checked expertise to avoid accidental submission
+    if (role !== 'architect') {
+      document.querySelectorAll('input[name="expertise_ids[]"]').forEach(cb => cb.checked = false);
+      const aLic = document.querySelector('input[name="architect_license_no"]');
+      if (aLic) aLic.value = '';
+    }
+  }
+
+  roleSel.addEventListener('change', toggleRoleFields);
+  toggleRoleFields();
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-
 
 

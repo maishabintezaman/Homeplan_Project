@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
   exit;
 }
 
-$owner_id    = (int)$_SESSION['user_id'];
+$provider_id    = (int)$_SESSION['user_id'];
 $property_id = (int)($_POST['property_id'] ?? 0);
 $csrf        = (string)($_POST['csrf_token'] ?? '');
 
@@ -37,7 +37,7 @@ try {
 
   // ensure property belongs to this owner
   $chk = $conn->prepare("SELECT property_id FROM properties WHERE property_id=? AND provider_id=? LIMIT 1");
-  $chk->bind_param("ii", $property_id, $owner_id);
+  $chk->bind_param("ii", $property_id, $provider_id);
   $chk->execute();
   if (!$chk->get_result()->fetch_assoc()) {
     throw new Exception("Property not found or not yours.");
@@ -50,7 +50,7 @@ try {
 
   // delete property
   $delProp = $conn->prepare("DELETE FROM properties WHERE property_id=? AND provider_id=?");
-  $delProp->bind_param("ii", $property_id, $owner_id);
+  $delProp->bind_param("ii", $property_id, $provider_id);
   $delProp->execute();
 
   $conn->commit();

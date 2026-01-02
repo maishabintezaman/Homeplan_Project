@@ -1,16 +1,20 @@
 <?php
-// /homeplan/client/dashboard.php
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../config/db.php';
 
 if (empty($_SESSION['user_id'])) {
   header("Location: /homeplan/auth/login.php");
   exit;
 }
-
 if (($_SESSION['role'] ?? '') !== 'client') {
-  header("Location: /homeplan/index.php");
+  header("Location: /homeplan/auth/login.php");
   exit;
 }
+
+$full_name = $_SESSION['full_name'] ?? 'Client';
 ?>
 <!doctype html>
 <html>
@@ -21,56 +25,59 @@ if (($_SESSION['role'] ?? '') !== 'client') {
 </head>
 <body class="bg-light">
 
-<?php require_once __DIR__ . '/../includes/topbar.php'; ?>
+<?php require_once __DIR__ . '/../partials/navbar.php'; ?>
 
-<div class="container py-3">
-
-  <div class="card shadow-sm mb-3">
+<div class="container py-4" style="max-width: 920px;">
+  <div class="card shadow-sm mb-4">
     <div class="card-body">
-      <h3 class="mb-1">Client Dashboard</h3>
-      <div class="text-muted">
-        Welcome, <?= htmlspecialchars($_SESSION['name'] ?? 'Client') ?>.
-      </div>
+      <h2 class="mb-1">Client Dashboard</h2>
+      <div class="text-muted">Welcome, <?= htmlspecialchars($full_name) ?>.</div>
     </div>
   </div>
 
-  <div class="row g-3">
-    <div class="col-md-4">
-      <a class="text-decoration-none" href="/homeplan/client/properties.php">
-        <div class="card shadow-sm h-100">
-          <div class="card-body">
-            <div class="fw-semibold">Browse Properties</div>
-            <div class="text-muted small">See available properties & details</div>
-          </div>
-        </div>
-      </a>
+  <div class="card shadow-sm mb-3">
+    <div class="card-body d-flex justify-content-between align-items-center">
+      <div>
+        <h4 class="mb-1">Browse Properties</h4>
+        <div class="text-muted">See available properties & details</div>
+      </div>
+      <a class="btn btn-primary" href="/homeplan/client/properties.php">View</a>
     </div>
+  </div>
 
-    <div class="col-md-4">
-      <a class="text-decoration-none" href="/homeplan/client/my_requests.php">
-        <div class="card shadow-sm h-100">
-          <div class="card-body">
-            <div class="fw-semibold">My Requests</div>
-            <div class="text-muted small">Track your booking / interest requests</div>
-          </div>
-        </div>
-      </a>
+  <!-- ✅ NEW: Providers -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-body d-flex justify-content-between align-items-center">
+      <div>
+        <h4 class="mb-1">Providers</h4>
+        <div class="text-muted">Find architects, developers, vendors & more</div>
+      </div>
+      <a class="btn btn-primary" href="/homeplan/client/providers.php">View</a>
     </div>
+  </div>
 
-    <div class="col-md-4">
-      <a class="text-decoration-none" href="/homeplan/client/notifications.php">
-        <div class="card shadow-sm h-100">
-          <div class="card-body">
-            <div class="fw-semibold">Notifications</div>
-            <div class="text-muted small">See updates and messages</div>
-          </div>
-        </div>
-      </a>
+  <div class="card shadow-sm mb-3">
+    <div class="card-body d-flex justify-content-between align-items-center">
+      <div>
+        <h4 class="mb-1">My Requests</h4>
+        <div class="text-muted">Track your booking / interest requests</div>
+      </div>
+      <a class="btn btn-outline-primary" href="/homeplan/client/my_requests.php">View</a>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body d-flex justify-content-between align-items-center">
+      <div>
+        <h4 class="mb-1">Notifications</h4>
+        <div class="text-muted">See updates and messages</div>
+      </div>
+      <a class="btn btn-outline-secondary" href="/homeplan/client/notifications.php">View</a>
     </div>
   </div>
 
 </div>
-
 </body>
 </html>
+
 

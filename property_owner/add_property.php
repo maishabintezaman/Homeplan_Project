@@ -19,7 +19,7 @@ if (($_SESSION['role'] ?? '') !== 'property_owner') {
   exit;
 }
 
-$owner_id = (int)$_SESSION['user_id'];
+$provider_id = (int)$_SESSION['user_id'];
 
 $error = '';
 $success = '';
@@ -127,7 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $no_of_bedrooms,
         $no_of_bathrooms,
         $availability,
-        $owner_id,
+        $provider_id,
         $location_id
       );
 

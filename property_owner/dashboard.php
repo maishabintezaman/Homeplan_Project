@@ -15,7 +15,7 @@ if (($_SESSION['role'] ?? '') !== 'property_owner') {
   exit;
 }
 
-$owner_id = (int)$_SESSION['user_id'];
+$provider_id = (int)$_SESSION['user_id'];
 
 $total_properties = 0;
 $total_requests   = 0;
@@ -27,7 +27,7 @@ $error = '';
 
 try {
     $stmt = $conn->prepare("SELECT COUNT(*) AS c FROM properties WHERE provider_id = ?");
-    $stmt->bind_param("i", $owner_id);
+    $stmt->bind_param("i", $provider_id);
     $stmt->execute();
     $total_properties = (int)($stmt->get_result()->fetch_assoc()['c'] ?? 0);
 
@@ -39,7 +39,7 @@ try {
         GROUP BY r.status
     ";
     $stmt2 = $conn->prepare($sqlReq);
-    $stmt2->bind_param("i", $owner_id);
+    $stmt2->bind_param("i", $provider_id);
     $stmt2->execute();
     $res2 = $stmt2->get_result();
 
@@ -77,6 +77,7 @@ try {
 
   <div class="d-flex justify-content-end gap-2 mb-3">
     <a class="btn btn-outline-primary" href="/homeplan/property_owner/my_properties.php">My Properties</a>
+    <a class="btn btn-outline-dark" href="/homeplan/property_owner/notifications.php">Notifications</a>
     <a class="btn btn-outline-primary" href="/homeplan/property_owner/requests.php">Requests</a>
     <a class="btn btn-primary" href="/homeplan/property_owner/add_property.php">Add Property</a>
   </div>

@@ -1,4 +1,5 @@
 <?php
+// /homeplan/property_owner/add_property_action.php
 session_start();
 require_once __DIR__ . '/../config/db.php';
 

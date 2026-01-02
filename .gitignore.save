@@ -1,5 +1,31 @@
-.env
-*.log
-/vendor
-/node_modules
+# macOS
+.DS_Store
 
+# uploads (never version images)
+uploads/
+uploads/*
+
+# backups
+*.bak.php
+
+# env / config secrets
+.env
+
+00# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs & cache
+*.log
+cache/
+tmp/
+
+# Environment secrets
+.env
+
+# Composer (if any)
+vendor/

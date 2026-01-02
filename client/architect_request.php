@@ -1,54 +1,35 @@
 <?php
-session_start();
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
+require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/db.php';
 
-if (empty($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'client') {
+if (empty($_SESSION['user_id']) || strtolower(trim($_SESSION['role'] ?? '')) !== 'client') {
   header("Location: /homeplan/auth/login.php");
   exit;
 }
 
-$clientId = (int)$_SESSION['user_id'];
-$architectUserId = (int)($_GET['id'] ?? 0);
+$client_id = (int)$_SESSION['user_id'];
+$architect_id = (int)($_GET['id'] ?? 0);
 
-if ($architectUserId <= 0) {
-  http_response_code(400);
-  echo "<h2>Invalid architect id</h2>";
-  exit;
+if ($architect_id <= 0) {
+  die("Invalid architect id");
 }
 
-try {
-  // SAFE: only use columns that almost certainly exist in users table
-  $stmt = $pdo->prepare("
-    SELECT
-      u.user_id,
-      u.full_name,
-      u.email,
-      u.phone,
-      u.role
-    FROM users u
-    WHERE u.user_id = ?
-    LIMIT 1
-  ");
-  $stmt->execute([$architectUserId]);
-  $architect = $stmt->fetch(PDO::FETCH_ASSOC);
+/* ensure architect exists */
+$st = $conn->prepare("
+  SELECT u.user_id, u.full_name, u.email, u.phone
+  FROM users u
+  WHERE u.user_id=? AND LOWER(TRIM(u.role))='architect'
+  LIMIT 1
+");
+$st->bind_param("i", $architect_id);
+$st->execute();
+$architect = $st->get_result()->fetch_assoc();
 
-  if (!$architect) {
-    http_response_code(404);
-    echo "<h2>Architect not found</h2>";
-    exit;
-  }
-
-  if (strtolower($architect['role'] ?? '') !== 'architect') {
-    http_response_code(403);
-    echo "<h2>This user is not an architect</h2>";
-    exit;
-  }
-
-} catch (Throwable $e) {
-  http_response_code(500);
-  echo "<h2>Database query failed</h2>";
-  echo "<p>" . htmlspecialchars($e->getMessage()) . "</p>";
-  exit;
+if (!$architect) {
+  die("Architect not found");
 }
 ?>
 <!doctype html>
@@ -59,17 +40,19 @@ try {
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 </head>
 <body class="bg-light">
+
+<?php require_once __DIR__ . '/../includes/topbar.php'; ?>
+
 <div class="container py-4" style="max-width: 900px;">
 
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h2 class="m-0">Request Architect</h2>
-    <a class="btn btn-outline-dark" href="/homeplan/client/architect_list.php">Back</a>
+    <h3 class="m-0">Request Architect</h3>
+    <a class="btn btn-outline-dark" href="/homeplan/client/architect_view.php?architect_id=<?= (int)$architect_id ?>">Back</a>
   </div>
 
   <div class="card shadow-sm">
     <div class="card-body">
-      <h4 class="mb-1"><?= htmlspecialchars($architect['full_name'] ?? '') ?></h4>
-
+      <h5 class="mb-1"><?= htmlspecialchars($architect['full_name']) ?></h5>
       <div class="text-muted">
         <?= htmlspecialchars($architect['email'] ?? '') ?>
         <?= !empty($architect['phone']) ? " | " . htmlspecialchars($architect['phone']) : "" ?>
@@ -78,15 +61,19 @@ try {
       <hr>
 
       <form method="post" action="/homeplan/client/architect_request_post.php" class="row g-3">
-        <input type="hidden" name="architect_user_id" value="<?= (int)$architect['user_id'] ?>">
+        <!-- IMPORTANT: name must match POST handler -->
+        <input type="hidden" name="architect_user_id" value="<?= (int)$architect_id ?>">
 
         <div class="col-md-6">
           <label class="form-label">Project Type</label>
           <select name="project_type" class="form-select" required>
             <option value="">Select...</option>
-            <option value="architecture">Architecture</option>
-            <option value="interior">Interior</option>
-            <option value="both">Both</option>
+            <option value="Residential">Residential</option>
+            <option value="Commercial">Commercial</option>
+            <option value="Renovation">Renovation</option>
+            <option value="Mosque">Mosque</option>
+            <option value="Interior">Interior</option>
+            <option value="Landscape">Landscape</option>
           </select>
         </div>
 
@@ -102,7 +89,7 @@ try {
 
         <div class="col-md-4">
           <label class="form-label">Budget (BDT)</label>
-          <input name="budget" type="number" class="form-control" min="0" required>
+          <input name="budget" type="number" class="form-control" min="0">
         </div>
 
         <div class="col-md-4">
@@ -126,4 +113,5 @@ try {
 </div>
 </body>
 </html>
+
 

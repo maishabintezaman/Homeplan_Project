@@ -95,7 +95,6 @@ try {
         <tbody>
           <?php foreach ($rows as $r): ?>
             <?php
-              // Build a nice location text from (house, street, city, area_code)
               $parts = [];
               if (!empty($r['house'])) $parts[] = $r['house'];
               if (!empty($r['street'])) $parts[] = $r['street'];
@@ -105,10 +104,7 @@ try {
               if (!empty($r['area_code'])) {
                 $locText .= " (" . $r['area_code'] . ")";
               }
-
-              if ($locText === '') {
-                $locText = 'N/A';
-              }
+              if ($locText === '') $locText = 'N/A';
             ?>
             <tr>
               <td><?= (int)$r['property_id'] ?></td>

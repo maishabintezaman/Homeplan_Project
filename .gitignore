@@ -1,3 +1,16 @@
+# macOS junk
+.DS_Store
+
+# user uploads (do not commit)
+uploads/
+
+# backups
+*.bak.php
+
+# secrets
+.env
+
+
 # OS files
 .DS_Store
 Thumbs.db
@@ -16,3 +29,4 @@ tmp/
 
 # Composer (if any)
 vendor/
+
